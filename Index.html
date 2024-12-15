@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>벽돌 피하기</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #000;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    canvas {
+      border: 2px solid white;
+      background-color: #111;
+    }
+
+    /* 조이스틱 스타일 */
+    #joystick {
+      position: absolute;
+      left: 20px;
+      bottom: 20px;
+      width: 100px;
+      height: 100px;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #joystick > .stick {
+      width: 50px;
+      height: 50px;
+      background-color: rgba(255, 255, 255, 0.7);
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="joystick">
+    <div class="stick"></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 400;
+    canvas.height = 600;
+
+    const player = { x: 180, y: 560, width: 30, height: 30, color: 'white', speed: 5 }; // 플레이어 크기 변경
+    const bricks = [];
+    let brickSpeed = 2; // 벽돌 속도 초기값
+    const brickInterval = 500; // 벽돌 생성 간격
+    let lastBrickTime = 0;
+
+    let score = 0;
+
+    // 방향키를 처리하기 위한 변수
+    const keys = { left: false, right: false };
+
+    // 컴퓨터 방향키 이동
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') keys.left = true;
+      if (e.key === 'ArrowRight') keys.right = true;
+    });
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft') keys.left = false;
+      if (e.key === 'ArrowRight') keys.right = false;
+    });
+
+    // 조이스틱 위치와 이동 값
+    let joystickCenter = { x: 0, y: 0 };
+    let joystickOffset = { x: 0, y: 0 };
+    let joystickPressed = false;
+
+    const joystickElement = document.getElementById('joystick');
+    const stickElement = joystickElement.querySelector('.stick');
+
+    // 터치 시작 이벤트
+    joystickElement.addEventListener('touchstart', (e) => {
+      joystickPressed = true;
+      joystickCenter.x = e.touches[0].clientX - joystickElement.offsetLeft;
+      joystickCenter.y = e.touches[0].clientY - joystickElement.offsetTop;
+    });
+
+    // 터치 이동 이벤트
+    joystickElement.addEventListener('touchmove', (e) => {
+      if (joystickPressed) {
+        const touchX = e.touches[0].clientX - joystickElement.offsetLeft;
+        const touchY = e.touches[0].clientY - joystickElement.offsetTop;
+
+        joystickOffset.x = touchX - joystickCenter.x;
+        joystickOffset.y = touchY - joystickCenter.y;
+
+        const distance = Math.sqrt(joystickOffset.x * joystickOffset.x + joystickOffset.y * joystickOffset.y);
+        const maxDistance = 40; // 최대 이동 범위
+
+        if (distance > maxDistance) {
+          const angle = Math.atan2(joystickOffset.y, joystickOffset.x);
+          joystickOffset.x = Math.cos(angle) * maxDistance;
+          joystickOffset.y = Math.sin(angle) * maxDistance;
+        }
+
+        stickElement.style.transform = `translate(${joystickOffset.x}px, ${joystickOffset.y}px)`;
+
+        // 플레이어 이동
+        if (joystickOffset.x < 0 && player.x > 0) player.x -= player.speed;
+        if (joystickOffset.x > 0 && player.x < canvas.width - player.width) player.x += player.speed;
+      }
+    });
+
+    // 터치 종료 이벤트
+    joystickElement.addEventListener('touchend', () => {
+      joystickPressed = false;
+      stickElement.style.transform = `translate(0, 0)`; // 조이스틱 리셋
+      joystickOffset = { x: 0, y: 0 }; // 이동값 초기화
+    });
+
+    // 게임 루프
+    function gameLoop(timestamp) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 컴퓨터 방향키로 플레이어 이동
+      if (keys.left && player.x > 0) player.x -= player.speed;
+      if (keys.right && player.x < canvas.width - player.width) player.x += player.speed;
+
+      // 플레이어 그리기
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+
+      // 벽돌 생성
+      if (timestamp - lastBrickTime > brickInterval) {
+        if (bricks.length < 10) { // 한 번에 10개씩 벽돌 생성
+          for (let i = 0; i < 10; i++) {
+            const brickWidth = 50;
+            const brickX = Math.random() * (canvas.width - brickWidth); // 벽돌이 랜덤하게 생성되도록 수정
+            bricks.push({ x: brickX, y: 0, width: brickWidth, height: 20, color: 'red' });
+          }
+        }
+        lastBrickTime = timestamp;
+      }
+
+      // 벽돌 속도 증가 (점수에 비례)
+      brickSpeed = 2 + Math.floor(score / 100); // 점수에 따라 벽돌 속도 증가
+
+      // 벽돌 이동 및 그리기
+      for (let i = bricks.length - 1; i >= 0; i--) {
+        const brick = bricks[i];
+        brick.y += brickSpeed;
+
+        // 충돌 감지
+        if (
+          player.x < brick.x + brick.width &&
+          player.x + player.width > brick.x &&
+          player.y < brick.y + brick.height &&
+          player.y + player.height > brick.y
+        ) {
+          alert(`게임 오버! 최종 점수: ${score}`);
+          bricks.length = 0; // 벽돌 초기화
+          player.x = 180; // 플레이어 위치 초기화
+          score = 0; // 점수 초기화
+          break;
+        }
+
+        // 벽돌 화면 밖 제거
+        if (brick.y > canvas.height) {
+          bricks.splice(i, 1);
+          score += 10; // 벽돌이 화면을 벗어나면 점수 추가
+        } else {
+          ctx.fillStyle = brick.color;
+          ctx.fillRect(brick.x, brick.y, brick.width, brick.height);
+        }
+      }
+
+      // 점수 표시
+      ctx.fillStyle = 'white';
+      ctx.font = '20px Arial';
+      ctx.fillText(`Score: ${score}`, 10, 30);
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
